@@ -1,5 +1,8 @@
+from graphql import GraphQLError
 import graphene
 from graphene_django import DjangoObjectType
+
+from django.db.models import Q
 
 from .models import Track, Like
 from users.schema import UserType
@@ -15,10 +18,19 @@ class LikeType(DjangoObjectType):
 
 
 class Query(graphene.ObjectType):
-    tracks = graphene.List(TrackType)
+    tracks = graphene.List(TrackType, search=graphene.String())
     likes = graphene.List(LikeType)
 
-    def resolve_tracks(self, info):
+    def resolve_tracks(self, info, search=None):
+        if search:
+            filters = (
+                Q(title__icontains=search) |
+                Q(description__icontains=search) |
+                Q(url__icontains=search) |
+                Q(posted_by__username__icontains=search)
+            )
+            return Track.objects.filter(filters)
+        
         return Track.objects.all()
 
     def resolve_likes(self, info):
@@ -37,7 +49,7 @@ class CreateTrack(graphene.Mutation):
         user = info.context.user
 
         if user.is_anonymous:
-            raise Exception("Log in to add new tracks!")
+            raise GraphQLError("Log in to add new tracks!")
 
         track = Track(title=title, description=description, url=url, posted_by=user)
         track.save()
@@ -54,11 +66,11 @@ class CreateLike(graphene.Mutation):
     def mutate(self, info, track_id):
         user = info.context.user
         if user.is_anonymous:
-            raise Exception("You need log in!")
+            raise GraphQLError("You need log in!")
 
         track = Track.objects.get(id=track_id)
         if not track:
-            raise Exception("Track not found!")
+            raise GraphQLError("Track not found!")
 
         Like.objects.create(
             user=user,
@@ -82,7 +94,7 @@ class UpdateTrack(graphene.Mutation):
         track = Track.objects.get(id=track_id)
 
         if track.posted_by != user:
-            raise Exception("You cannot update a track posted by a another user!")
+            raise GraphQLError("You cannot update a track posted by a another user!")
 
         track.title = title
         track.description = description
@@ -103,7 +115,7 @@ class DeleteTrack(graphene.Mutation):
         track = Track.objects.get(id=track_id)
 
         if track.posted_by != user:
-            raise Exception("You cannot delete a track posted by a another user!")
+            raise GraphQLError("You cannot delete a track posted by a another user!")
         
         track.delete()
 
