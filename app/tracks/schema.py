@@ -1,5 +1,3 @@
-#teste
-
 from graphql import GraphQLError
 import graphene
 from graphene_django import DjangoObjectType
